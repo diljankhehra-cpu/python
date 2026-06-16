@@ -1,0 +1,47 @@
+name: Bulk Channel Scanner
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_id:
+        description: 'Kithon shuru karna (Start ID)'
+        required: true
+        default: '666'
+      end_id:
+        description: 'Kithe khatam karna (End ID)'
+        required: true
+        default: '2000'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Code Fetch Karo
+      uses: actions/checkout@v4
+
+    - name: Python Setup
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: FFMPEG te Requests Install Karo
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+        pip install requests
+
+    - name: Script Nu Run Karo
+      env:
+        # Aithe direct variables pass kar rahe han Python nu
+        START_ID: ${{ github.event.inputs.start_id }}
+        END_ID: ${{ github.event.inputs.end_id }}
+      run: |
+        python bulk_extractor.py
+
+    - name: Photos Nu Zip Karke Upload Karo
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: channels-${{ github.event.inputs.start_id }}-to-${{ github.event.inputs.end_id }}
+        path: captured_channels/
