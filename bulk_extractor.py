@@ -5,54 +5,50 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 
-START_ID = int(os.environ.get("START_ID", 1000))
-END_ID = int(os.environ.get("END_ID", 1050))
+START_ID = int(os.environ.get("START_ID", 666))
+END_ID = int(os.environ.get("END_ID", 750))
 OUTPUT_FILE = "channels.txt"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-# Standard Channel List - Je ehna chon koi v akhar text ch dikhya, taan naam automatic clean ho javega
-KNOWN_BRANDS = [
-    "STAR", "SONY", "ZEE", "SUN", "NDTV", "VASANTH", "LIVING INDIA", "GOODTIMES", 
-    "COLORS", "PTC", "MH1", "MOVIES", "NEWS", "SPORTS", "TEN", "DISCOVERY", 
-    "ANIMAL PLANET", "TLC", "MTV", "BINDASS", "CARTOON", "NICK", "POGO"
-]
-
 import easyocr
+# EasyOCR English model load karo
 reader = easyocr.Reader(['en']) 
 
-def filter_smart_name(text_list, stream_id):
-    full_text = " ".join(text_list).upper()
+def clean_extracted_text(text_list, stream_id):
+    """Bina static names de, extracted text nu pure dynamic filter karna"""
+    valid_words = []
     
-    # 1. Pehla check karo je koi janya-pachanya brand name match hunda hai
-    for brand in KNOWN_BRANDS:
-        if brand in full_text:
-            # Je brand mil jave, taan text chon faltu symbols saaf karke 2-3 vaild words rkho
-            clean_brand_text = re.sub(r'[^A-Z0-9\s]', '', full_text)
-            words = clean_brand_text.split()
-            # Brand de aale-duale de main words chkk lo (e.g., STAR MOVIES HD)
-            idx = words.index(brand.split()[0])
-            extracted = " ".join(words[idx:idx+4])
-            return extracted
-            
-    # 2. Je koi brand na miley, taan tute-futte akhar saaf karo
-    clean_text = re.sub(r'[^A-Z0-9\s]', '', full_text)
-    words = [w for w in clean_text.split() if len(w) > 2 and not w.isdigit()]
-    
-    final_name = " ".join(words).strip()
-    
-    # 3. Je poora hi kachra hove, taan simple Channel ID rkho
-    if not final_name or len(final_name) < 3 or len(final_name) > 25:
-        return f"CHANNEL {stream_id}"
+    for word in text_list:
+        word = word.upper().strip()
         
-    return final_name
+        # 1. Chote tute akhar (len < 3) uddao
+        if len(word) < 3:
+            continue
+            
+        # 2. Sirf clean numbers te alphabets rkho (symbols saaf)
+        clean_word = re.sub(r'[^A-Z0-9\s]', '', word).strip()
+        
+        # 3. Default text ya stream ID filter karo
+        if clean_word.isdigit() or "CHANNEL" in clean_word or str(stream_id) in clean_word:
+            continue
+            
+        # 4. Faltu live stream info filter out karo
+        if any(tag in clean_word for tag in ["LIVE", "NOW", "FLAT", "LINE", "PLUS", "JUN", "TUE", "AM", "PM"]):
+            continue
+            
+        if clean_word and not clean_word.isdigit():
+            valid_words.append(clean_word)
+            
+    return " ".join(valid_words).strip()
 
 def process_id(stream_id):
     base_url = f"https://mini.allinonereborn.fun/tata.php?id={stream_id}"
     temp_img = f"temp_{stream_id}.jpg"
-    crop_img = f"crop_{stream_id}.jpg"
+    crop_left = f"crop_left_{stream_id}.jpg"
+    crop_right = f"crop_right_{stream_id}.jpg"
     
     try:
         response = requests.get(base_url, headers=HEADERS, allow_redirects=True, timeout=5, stream=True)
@@ -62,6 +58,7 @@ def process_id(stream_id):
         if "tata.php" in real_url or response.status_code != 200:
             return 
             
+        # 1. FFmpeg naal 2nd second te snapshot chkko
         command = [
             'ffmpeg', '-y', '-timeout', '4000000',
             '-i', real_url, '-ss', '00:00:02', '-vframes', '1', temp_img
@@ -72,30 +69,53 @@ def process_id(stream_id):
             img = Image.open(temp_img)
             width, height = img.size
             
-            # Top 22% logo area crop
-            box = (0, 0, width, int(height * 0.22))
-            cropped = img.crop(box)
-            cropped.save(crop_img)
+            # --- DYNAMIC CORNER CROPPING ---
+            # Top-Left Corner Box (Top 20% height, Left 30% width)
+            box_left = (0, 0, int(width * 0.30), int(height * 0.20))
+            img.crop(box_left).save(crop_left)
             
-            text_results = reader.readtext(crop_img, detail=0)
+            # Top-Right Corner Box (Top 20% height, Right 30% width)
+            box_right = (int(width * 0.70), 0, width, int(height * 0.20))
+            img.crop(box_right).save(crop_right)
             
-            # Smart filter lagao
-            channel_name = filter_smart_name(text_results, stream_id)
+            # 2. Dona corners ton text read karo
+            text_left = reader.readtext(crop_left, detail=0)
+            text_right = reader.readtext(crop_right, detail=0)
             
-            print(f"[SMART CLEAN] ID {stream_id} -> {channel_name}")
+            # 3. Clean karo text nu
+            clean_left = clean_extracted_text(text_left, stream_id)
+            clean_right = clean_extracted_text(text_right, stream_id)
             
+            # 4. Faisla karo ke channel name kehda rakhna hai
+            if clean_left and clean_right:
+                channel_name = f"{clean_left} {clean_right}"
+            elif clean_left:
+                channel_name = clean_left
+            elif clean_right:
+                channel_name = clean_right
+            else:
+                channel_name = f"CHANNEL {stream_id}"
+                
+            # Final validation (Je poora lamba kachra text hove taan standard fallback)
+            if len(channel_name) > 30:
+                channel_name = f"CHANNEL {stream_id}"
+                
+            print(f"[CORNER SUCCESS] ID {stream_id} -> {channel_name}")
+            
+            # STRICT SIMPLE 2-LINE FORMAT SAVE
             with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
                 f.write(f"{channel_name}\n{base_url}\n")
                 
-            if os.path.exists(temp_img): os.remove(temp_img)
-            if os.path.exists(crop_img): os.remove(crop_img)
+            # Faltu temp images saaf karo
+            for f_path in [temp_img, crop_left, crop_right]:
+                if os.path.exists(f_path): os.remove(f_path)
             
     except Exception:
-        if os.path.exists(temp_img): os.remove(temp_img)
-        if os.path.exists(crop_img): os.remove(crop_img)
+        for f_path in [temp_img, crop_left, crop_right]:
+            if os.path.exists(f_path): os.remove(f_path)
 
 if __name__ == "__main__":
-    print(f"Smart Scanning from {START_ID} to {END_ID}...")
+    print(f"Scanning Corners (Top-Left & Top-Right) from {START_ID} to {END_ID}...")
     with ThreadPoolExecutor(max_workers=5) as executor:
         executor.map(process_id, range(START_ID, END_ID + 1))
     print("Batch Complete!")
