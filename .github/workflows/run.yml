@@ -1,4 +1,4 @@
-name: Automatic Zip Screenshot Scanner
+name: Auto Splitting Folder Scanner
 
 on:
   workflow_dispatch:
@@ -6,11 +6,11 @@ on:
       start_id:
         description: 'Start ID'
         required: true
-        default: '666'
+        default: '10000'
       end_id:
         description: 'End ID'
         required: true
-        default: '700'
+        default: '13000'
 
 permissions: write-all
 
@@ -49,11 +49,15 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        # Sirf channels.txt te zip file nu add karo repo vich
-        git add channels.txt channel_screenshots.zip
+        # ਪੁਰਾਣੀ ਫਸੀ ਹੋਈ ਜ਼ਿਪ ਨੂੰ ਜੜ੍ਹ ਤੋਂ ਹਟਾਓ
+        rm -f channel_screenshots.zip
+        git rm --cached channel_screenshots.zip || true
+        
+        # ਸਾਰੀਆਂ ਫਾਈਲਾਂ ਅਤੇ ਬਣੇ ਹੋਏ ਸਾਰੇ ਪਾਰਟ ਫੋਲਡਰਾਂ ਨੂੰ ਐਡ ਕਰੋ
+        git add channels.txt screenshots_part*
         
         if ! git diff-index --quiet HEAD; then
-          git commit -m "Updated channels.txt and zip archive for IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
+          git commit -m "Saved screenshots in automatic 50MB split folders"
           git pull --rebase origin main
           git push origin main
         else
