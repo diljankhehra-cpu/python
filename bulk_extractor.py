@@ -5,7 +5,7 @@ import subprocess
 START_ID = int(os.environ.get("START_ID", 10000))
 END_ID = int(os.environ.get("END_ID", 13000))
 OUTPUT_FILE = "channels.txt"
-MAX_FOLDER_SIZE = 48 * 1024 * 1024 # ਲਗਭਗ 48-50 MB ਦੀ ਲਿਮਿਟ
+MAX_FOLDER_SIZE = 48 * 1024 * 1024 # 48-50 MB ਦੀ ਲਿਮਿਟ
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -35,26 +35,34 @@ def process_id(stream_id):
     base_url = f"https://mini.allinonereborn.fun/tata.php?id={stream_id}"
     
     try:
-        response = requests.get(base_url, headers=HEADERS, allow_redirects=True, timeout=4, stream=True)
+        # 1. Python ਦੇ ਅੰਦਰ ਰੀਡਾਇਰੈਕਸ਼ਨ ਫੋਲੋ ਕਰਕੇ ਅਸਲੀ ਲਿੰਕ ਲੱਭੋ
+        response = requests.get(base_url, headers=HEADERS, allow_redirects=True, timeout=5, stream=True)
         real_url = response.url
+        status = response.status_code
         response.close()
         
-        if "tata.php" in real_url or response.status_code != 200:
+        if "tata.php" in real_url or status != 200:
             return 
             
-        # ਸਾਈਜ਼ ਚੈੱਕ ਕਰਕੇ ਸਹੀ ਫੋਲਡਰ ਚੁਣੋ (50MB ਲਿਮਿਟ)
         target_dir = get_active_folder()
         output_img = f"{target_dir}/{stream_id}.jpg"
         
-        # FFmpeg snapshot
+        # 2. FFmpeg Command - ਰੀਡਾਇਰੈਕਸ਼ਨ ਫੋਲੋ ਕਰਨ ਲਈ ਵਿਸ਼ੇਸ਼ ਪੈਰਾਮੀਟਰ ਐਡ ਕੀਤੇ ਨੇ
         command = [
-            'ffmpeg', '-y', '-timeout', '4000000',
-            '-i', real_url, '-ss', '00:00:02', '-vframes', '1', output_img
+            'ffmpeg', '-y', 
+            '-timeout', '5000000',                  # 5 ਸੈਕਿੰਡ ਦਾ ਕਨੈਕਸ਼ਨ ਟਾਈਮਆਊਟ
+            '-user_agent', HEADERS["User-Agent"],     # ਯੂਜ਼ਰ ਏਜੰਟ ਪਾਸ ਕਰਨਾ ਜ਼ਰੂਰੀ ਹੈ
+            '-redirect_with_list', '1',               # <--- ਇਹ ਰੀਡਾਇਰੈਕਸ਼ਨ ਨੂੰ 100% ਫੋਲੋ ਕਰੇਗਾ
+            '-i', real_url, 
+            '-ss', '00:00:03',                       # 3 ਸੈਕਿੰਡ 'ਤੇ ਸਟ੍ਰੀਮ ਸਟੇਬਲ ਹੋਣ ਤੋਂ ਬਾਅਦ ਫੋਟੋ ਲਵੇਗਾ
+            '-vframes', '1', 
+            output_img
         ]
-        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        
+        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
         
         if result.returncode == 0 and os.path.exists(output_img):
-            print(f"[SUCCESS] Captured ID {stream_id} in {target_dir}")
+            print(f"[SUCCESS] Captured ID {stream_id} -> Saved in {target_dir}")
             with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
                 f.write(f"CHANNEL {stream_id}\n{base_url}\n")
                 
@@ -62,7 +70,7 @@ def process_id(stream_id):
         pass
 
 if __name__ == "__main__":
-    print(f"Scanning from {START_ID} to {END_ID} with automatic 50MB folder splitting...")
+    print(f"Scanning {START_ID} to {END_ID} with Redirection-Follow Enabled...")
     for s_id in range(START_ID, END_ID + 1):
         process_id(s_id)
-    print("All Batches Complete!")
+    print("All Batches with Redirection Complete!")
