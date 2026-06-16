@@ -1,4 +1,4 @@
-name: Crop OCR Stream Scanner
+name: Automatic Zip Screenshot Scanner
 
 on:
   workflow_dispatch:
@@ -6,11 +6,11 @@ on:
       start_id:
         description: 'Start ID'
         required: true
-        default: '1000'
+        default: '666'
       end_id:
         description: 'End ID'
         required: true
-        default: '1050'
+        default: '700'
 
 permissions: write-all
 
@@ -23,7 +23,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         persist-credentials: true
-        fetch-depth: 0 # Poori history chkko taan jo rebase sahi hove
+        fetch-depth: 0
 
     - name: Python Setup
       uses: actions/setup-python@v5
@@ -35,15 +35,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ffmpeg
 
-    - name: EasyOCR Models Cache Setup
-      uses: actions/cache@v4
-      with:
-        path: ~/.EasyOCR/model
-        key: ${{ runner.os }}-easyocr-models-en
-
     - name: Python Packages Install Karo
-      run: |
-        pip install requests easyocr pillow torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+      run: pip install requests
 
     - name: Script Nu Run Karo
       env:
@@ -51,23 +44,17 @@ jobs:
         END_ID: ${{ github.event.inputs.end_id }}
       run: python bulk_extractor.py
 
-    # --- UPDATED PUSH SECTION WITH REBASE ---
     - name: Save to GitHub Repository
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        # Pehla files add karo
-        git add channels.txt
+        # Sirf channels.txt te zip file nu add karo repo vich
+        git add channels.txt channel_screenshots.zip
         
-        # Je koi badlaav hoya hai taan hi commit karo
         if ! git diff-index --quiet HEAD; then
-          git commit -m "Updated channels.txt with Crop OCR IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
-          
-          # Pakka hal: Push karan ton pehla rebase pull karo taan jo conflict na aave
+          git commit -m "Updated channels.txt and zip archive for IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
           git pull --rebase origin main
-          
-          # Hun final push karo
           git push origin main
         else
           echo "No changes to commit"
