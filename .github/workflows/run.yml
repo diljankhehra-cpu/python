@@ -40,4 +40,3 @@ jobs:
       with:
         name: m3u-playlist-${{ github.event.inputs.start_id }}-to-${{ github.event.inputs.end_id }}
         path: playlist.m3u
-        
