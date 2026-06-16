@@ -49,17 +49,24 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        # ਪੁਰਾਣੀ ਫਸੀ ਹੋਈ ਜ਼ਿਪ ਨੂੰ ਜੜ੍ਹ ਤੋਂ ਹਟਾਓ
+        # ਪੁਰਾਣੀ ਫਸੀ ਹੋਈ ਜ਼ਿਪ ਨੂੰ ਹਟਾਓ
         rm -f channel_screenshots.zip
         git rm --cached channel_screenshots.zip || true
         
-        # ਸਾਰੀਆਂ ਫਾਈਲਾਂ ਅਤੇ ਬਣੇ ਹੋਏ ਸਾਰੇ ਪਾਰਟ ਫੋਲਡਰਾਂ ਨੂੰ ਐਡ ਕਰੋ
-        git add channels.txt screenshots_part*
+        # ਜੇ channels.txt ਬਣਿਆ ਹੈ ਤਾਂ ਉਸਨੂੰ ਐਡ ਕਰੋ
+        if [ -f channels.txt ]; then
+          git add channels.txt
+        fi
+        
+        # ਜੇ ਕੋਈ screenshots_part ਫੋਲਡਰ ਬਣਿਆ ਹੈ, ਤਾਂ ਹੀ ਐਡ ਕਰੋ (ਐਰਰ ਫਿਕਸ)
+        if ls d screenshots_part* 1> /dev/null 2>&1; then
+          git add screenshots_part*
+        fi
         
         if ! git diff-index --quiet HEAD; then
           git commit -m "Saved screenshots in automatic 50MB split folders"
           git pull --rebase origin main
           git push origin main
         else
-          echo "No changes to commit"
+          echo "No changes to commit (No active channels found)"
         fi
