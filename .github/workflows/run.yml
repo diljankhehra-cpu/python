@@ -1,16 +1,18 @@
-name: OCR Stream Scanner to File
+name: OCR Stream Scanner (Clean Output)
 
 on:
   workflow_dispatch:
     inputs:
       start_id:
-        description: 'Start ID (Kithon shuru)'
+        description: 'Start ID'
         required: true
         default: '666'
       end_id:
-        description: 'End ID (Kithe mukkna)'
+        description: 'End ID'
         required: true
-        default: '800' # OCR thoda time lenda, es lyi 100-200 ids krke chalao
+        default: '800'
+
+permissions: write-all
 
 jobs:
   scan_and_commit:
@@ -20,7 +22,7 @@ jobs:
     - name: Code Fetch Karo
       uses: actions/checkout@v4
       with:
-        persist-credentials: true # Git push karan lyi zaroori hai
+        persist-credentials: true
 
     - name: Python Setup
       uses: actions/setup-python@v5
@@ -32,7 +34,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ffmpeg
 
-    - name: Python Packages (Requests + EasyOCR)
+    - name: EasyOCR Models Cache Setup
+      uses: actions/cache@v3
+      with:
+        path: ~/.EasyOCR/model
+        key: ${{ runner.os }}-easyocr-models-en
+
+    - name: Python Packages Install Karo
       run: |
         pip install requests easyocr torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
 
@@ -42,13 +50,10 @@ jobs:
         END_ID: ${{ github.event.inputs.end_id }}
       run: python bulk_extractor.py
 
-    - name: Output Nu GitHub Repo te Push Karo
+    - name: Save to GitHub Repository
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        
-        # Check karo je file ch badlaav hoya hai
         git add channels.txt
-        git diff-index --quiet HEAD || git commit -m "Updated channels.txt with IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
-        
+        git diff-index --quiet HEAD || git commit -m "Updated channels.txt with Clean IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
         git push origin main
