@@ -1,32 +1,40 @@
-name: Auto M3U Generator
+name: OCR Stream Scanner to File
 
 on:
   workflow_dispatch:
     inputs:
       start_id:
-        description: 'Kithon shuru karna (Start ID)'
+        description: 'Start ID (Kithon shuru)'
         required: true
         default: '666'
       end_id:
-        description: 'Kithe khatam karna (End ID)'
+        description: 'End ID (Kithe mukkna)'
         required: true
-        default: '3000' # Hun assi vaddi range chala sakde han kyonki script fast hai
+        default: '800' # OCR thoda time lenda, es lyi 100-200 ids krke chalao
 
 jobs:
-  generate:
+  scan_and_commit:
     runs-on: ubuntu-latest
 
     steps:
     - name: Code Fetch Karo
       uses: actions/checkout@v4
+      with:
+        persist-credentials: true # Git push karan lyi zaroori hai
 
     - name: Python Setup
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    - name: Requests Install Karo
-      run: pip install requests
+    - name: System Dependencies (FFmpeg)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+
+    - name: Python Packages (Requests + EasyOCR)
+      run: |
+        pip install requests easyocr torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
 
     - name: Script Nu Run Karo
       env:
@@ -34,9 +42,13 @@ jobs:
         END_ID: ${{ github.event.inputs.end_id }}
       run: python bulk_extractor.py
 
-    - name: M3U Playlist Nu Upload Karo
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: m3u-playlist-${{ github.event.inputs.start_id }}-to-${{ github.event.inputs.end_id }}
-        path: playlist.m3u
+    - name: Output Nu GitHub Repo te Push Karo
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        # Check karo je file ch badlaav hoya hai
+        git add channels.txt
+        git diff-index --quiet HEAD || git commit -m "Updated channels.txt with IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
+        
+        git push origin main
