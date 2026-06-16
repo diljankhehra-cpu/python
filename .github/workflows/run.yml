@@ -1,4 +1,4 @@
-name: OCR Stream Scanner (Clean Output)
+name: Accurate Stream Metadata Scanner
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
       end_id:
         description: 'End ID'
         required: true
-        default: '800'
+        default: '1200' # Hun tusi 500-600 IDs 1 mint ch scan kar ਸਕਦੇ ਹੋ
 
 permissions: write-all
 
@@ -29,20 +29,8 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: System Dependencies (FFmpeg)
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg
-
-    - name: EasyOCR Models Cache Setup
-      uses: actions/cache@v3
-      with:
-        path: ~/.EasyOCR/model
-        key: ${{ runner.os }}-easyocr-models-en
-
     - name: Python Packages Install Karo
-      run: |
-        pip install requests easyocr torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+      run: pip install requests
 
     - name: Script Nu Run Karo
       env:
@@ -55,5 +43,5 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         git add channels.txt
-        git diff-index --quiet HEAD || git commit -m "Updated channels.txt with Clean IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
+        git diff-index --quiet HEAD || git commit -m "Updated channels.txt with Accurate IDs ${{ github.event.inputs.start_id }}-${{ github.event.inputs.end_id }}"
         git push origin main
