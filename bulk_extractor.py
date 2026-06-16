@@ -1,44 +1,52 @@
 import os
 import requests
-import subprocess
 import re
 from concurrent.futures import ThreadPoolExecutor
 
 START_ID = int(os.environ.get("START_ID", 666))
-END_ID = int(os.environ.get("END_ID", 700))
+END_ID = int(os.environ.get("END_ID", 1000)) # Hun tusi 500-1000 IDs da batch chala sakde ho kyonki eh bhot fast hai
 OUTPUT_FILE = "channels.txt"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-import easyocr
-reader = easyocr.Reader(['en']) 
-
-def clean_ocr_text(text_list, stream_id):
-    """Kachra text saaf karan te asli channel name labhan lyi filter"""
-    full_text = " ".join(text_list).strip()
+def parse_accurate_name(m3u8_url, stream_id):
+    """m3u8 file de andar vadke asli channel name te logo kadhan lyi"""
+    try:
+        # m3u8 file da content fetch karo
+        response = requests.get(m3u8_url, headers=HEADERS, timeout=5)
+        if response.status_code == 200:
+            content = response.text
+            
+            # 1. Check karo je #EXTINF de andar group-title ya tvg-name likhya hove
+            # Providers aam tor te aiven likhde ne: tvg-name="STAR SPORTS 1" ya group-title="SPORTS"
+            name_match = re.search(r'tvg-name="([^"]+)"', content)
+            if not name_match:
+                name_match = re.search(r'group-title="([^"]+)"', content)
+            
+            if name_match:
+                return name_match.group(1).strip().upper()
+            
+            # 2. Je ਉੱਪਰਲਾ ਕੁਝ ਨਾ ਮਿਲੇ, ਤਾਂ line ਦੇ ਆਖਿਰ ਵਾਲਾ ਸਾਫ ਨਾਮ ਚੱਕੋ (ਜੋ comma , ਤੋਂ ਬਾਅਦ ਹੁੰਦਾ ਹੈ)
+            lines = content.split('\n')
+            for line in lines:
+                if "#EXTINF" in line and "," in line:
+                    clean_name = line.split(",")[-1].strip()
+                    if clean_name and not clean_name.startswith("#"):
+                        return clean_name.upper()
+                        
+    except Exception:
+        pass
     
-    # 1. Faltu common garbage patterns te ad text uddao
-    full_text = re.sub(r'\b(Find Your|PM|AM|Course|Year|Diploma|Tv|Journalism|Filmmaking|Acting|Weekend|Workshop|Headline|News 50|Tue|June|Sory|Download|Http|Https|Web)\b.*', '', full_text, flags=re.IGNORECASE)
-    
-    # 2. Sirf Numbers, special symbols (@, #, $, %, etc.) te tute-futte akhar saaf karo
-    full_text = re.sub(r'[^a-zA-Z0-9\s:|-]', '', full_text)
-    
-    # Lines nu saaf karke single spaces bnao
-    clean_name = " ".join(full_text.split()).strip()
-    
-    # 3. Agar naam bhot lamba hove (yaani ad text hai) ya khali hove, taan simple ID rakh do
-    if not clean_name or len(clean_name) < 3 or len(clean_name) > 30:
-        clean_name = f"Channel {stream_id}"
-        
-    return clean_name.upper()
+    # Je m3u8 content chon v na miley, taan default standard name rakh do
+    return f"CHANNEL {stream_id}"
 
 def process_id(stream_id):
     base_url = f"https://mini.allinonereborn.fun/tata.php?id={stream_id}"
-    temp_img = f"temp_{stream_id}.jpg"
     
     try:
+        # Sirf network redirect follow karna hai, zero video downloading!
         response = requests.get(base_url, headers=HEADERS, allow_redirects=True, timeout=5, stream=True)
         real_url = response.url
         response.close()
@@ -46,33 +54,21 @@ def process_id(stream_id):
         if "tata.php" in real_url or response.status_code != 200:
             return 
             
-        command = [
-            'ffmpeg', '-y', '-timeout', '4000000',
-            '-i', real_url, '-ss', '00:00:01', '-vframes', '1', temp_img
-        ]
-        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
+        # Asli m3u8 de andar vad ke accurate naam kaddho
+        channel_name = parse_accurate_name(real_url, stream_id)
         
-        if result.returncode == 0 and os.path.exists(temp_img):
-            text_results = reader.readtext(temp_img, detail=0)
-            
-            # Kachra filter karke simple naam kadho
-            channel_name = clean_ocr_text(text_results, stream_id)
-            
-            print(f"[CLEANED] ID {stream_id} -> {channel_name}")
-            
-            # --- STRICT SIMPLE FORMAT ---
-            # Pehli line: Channel Name, Agli line: Link
-            with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
-                f.write(f"{channel_name}\n{base_url}\n")
-                
-            os.remove(temp_img)
+        print(f"[PARSED SUCCESS] ID {stream_id} -> {channel_name}")
+        
+        # Tuhade ditte strict 2-line format vich save karna
+        with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{channel_name}\n{base_url}\n")
             
     except Exception:
-        if os.path.exists(temp_img):
-            os.remove(temp_img)
+        pass
 
 if __name__ == "__main__":
-    print(f"Clean Scanning {START_ID} to {END_ID}...")
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    print(f"Metadata Scanning {START_ID} to {END_ID}...")
+    # Network calls fast hundiyan ne, es lyi workers vadha ditte
+    with ThreadPoolExecutor(max_workers=15) as executor:
         executor.map(process_id, range(START_ID, END_ID + 1))
     print("Batch Complete!")
