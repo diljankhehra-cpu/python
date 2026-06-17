@@ -5,15 +5,11 @@ import subprocess
 START_ID = int(os.environ.get("START_ID", 10000))
 END_ID = int(os.environ.get("END_ID", 13000))
 OUTPUT_FILE = "channels.txt"
-MAX_FOLDER_SIZE = 48 * 1024 * 1024 
+MAX_FOLDER_SIZE = 48 * 1024 * 1024 # 48-50 MB ਦੀ ਲਿਮਿਟ
 
-# ਸੁਪਰ ਬਾਈਪਾਸ ਹੈਡਰਸ (ਤਾਕਿ ਗਿਟਹੱਬ ਬਲੌਕ ਨਾ ਹੋਵੇ)
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "en-IN,en-GB;q=0.9,en-US;q=0.8,hi;q=0.7",
-    "Referer": "https://mini.allinonereborn.fun/",
-    "Connection": "keep-alive"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://mini.allinonereborn.fun/"
 }
 
 def get_folder_size(folder):
@@ -40,33 +36,29 @@ def process_id(stream_id):
     base_url = f"https://mini.allinonereborn.fun/tata.php?id={stream_id}"
     
     try:
-        # Session ਵਰਤ ਕੇ ਕੂਕੀਜ਼ ਆਟੋਮੈਟਿਕ ਸੇਵ ਕਰਾਂਗੇ
-        session = requests.Session()
-        response = session.get(base_url, headers=HEADERS, allow_redirects=True, timeout=7)
-        real_url = response.url
+        # ਸਿਰਫ਼ ਇਹ ਚੈੱਕ ਕਰੋ ਕਿ ਵੈੱਬਸਾਈਟ ਖੁੱਲ੍ਹ ਰਹੀ ਹੈ ਜਾਂ ਨਹੀਂ (Status 200)
+        response = requests.get(base_url, headers=HEADERS, allow_redirects=True, timeout=5)
         status = response.status_code
         response.close()
         
-        # ਜੇ ਲਿੰਕ ਬਲੌਕ ਹੋ ਕੇ ਵਾਪਸ tata.php 'ਤੇ ਭੇਜ ਰਿਹਾ ਹੈ ਤਾਂ ਸਕਿਪ ਨਾ ਕਰੇ, FFmpeg ਨੂੰ ਚੈੱਕ ਕਰਨ ਦੇਵੇ
         if status != 200:
             return 
             
         target_dir = get_active_folder()
         output_img = f"{target_dir}/{stream_id}.jpg"
         
-        # FFmpeg ਕਮਾਂਡ - ਫੁੱਲ ਬਾਈਪਾਸ ਪੈਰਾਮੀਟਰਾਂ ਨਾਲ
+        # FFmpeg ਸਿੱਧਾ ਲਿੰਕ ਤੋਂ ਵੀਡੀਓ ਖਿੱਚੇਗਾ - ਕੋਈ ਰੋਕ-ਟੋਕ ਨਹੀਂ
         command = [
             'ffmpeg', '-y', 
-            '-timeout', '6000000',
+            '-timeout', '5000000',
             '-headers', f"User-Agent: {HEADERS['User-Agent']}\r\nReferer: {HEADERS['Referer']}\r\n",
-            '-redirect_with_list', '1',
-            '-i', real_url, 
+            '-i', base_url, 
             '-ss', '00:00:03', 
             '-vframes', '1', 
             output_img
         ]
         
-        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
         
         if result.returncode == 0 and os.path.exists(output_img):
             print(f"[SUCCESS] Captured ID {stream_id} -> Saved in {target_dir}")
@@ -77,7 +69,7 @@ def process_id(stream_id):
         pass
 
 if __name__ == "__main__":
-    print(f"Scanning {START_ID} to {END_ID} with Anti-Block Bypass Enabled...")
+    print(f"Scanning {START_ID} to {END_ID} with Direct FFmpeg Stream Reader...")
     for s_id in range(START_ID, END_ID + 1):
         process_id(s_id)
-    print("All Batches with Bypass Complete!")
+    print("All Batches Complete!")
