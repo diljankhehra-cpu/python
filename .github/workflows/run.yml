@@ -53,20 +53,21 @@ jobs:
         rm -f channel_screenshots.zip
         git rm --cached channel_screenshots.zip || true
         
-        # ਜੇ channels.txt ਬਣਿਆ ਹੈ ਤਾਂ ਉਸਨੂੰ ਐਡ ਕਰੋ
+        # ਗਿਟਹੱਬ ਦੇ ਸਿਸਟਮ ਨੂੰ ਰਿਫ੍ਰੈਸ਼ ਕਰਨ ਲਈ 5 ਸੈਕਿੰਡ ਰੁਕੋ
+        sleep 5
+        
+        # channels.txt ਨੂੰ ਐਡ ਕਰੋ
         if [ -f channels.txt ]; then
           git add channels.txt
         fi
         
-        # ਜੇ ਕੋਈ screenshots_part ਫੋਲਡਰ ਬਣਿਆ ਹੈ, ਤਾਂ ਹੀ ਐਡ ਕਰੋ (ਐਰਰ ਫਿਕਸ)
-        if ls d screenshots_part* 1> /dev/null 2>&1; then
-          git add screenshots_part*
-        fi
+        # ਸਾਰੇ ਬਣੇ ਹੋਏ ਫੋਲਡਰਾਂ ਨੂੰ ਜ਼ਬਰਦਸਤੀ ਐਡ ਕਰੋ
+        git add screenshots_part* || true
         
         if ! git diff-index --quiet HEAD; then
-          git commit -m "Saved screenshots in automatic 50MB split folders"
+          git commit -m "Force saved screenshots in automatic 50MB split folders"
           git pull --rebase origin main
           git push origin main
         else
-          echo "No changes to commit (No active channels found)"
+          echo "No changes to commit"
         fi
